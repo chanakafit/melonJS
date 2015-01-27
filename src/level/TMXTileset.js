@@ -1,6 +1,6 @@
 /*
  * MelonJS Game Engine
- * Copyright (C) 2011 - 2013, Olivier BIOT
+ * (C) 2011 - 2015 Olivier Biot, Jason Oster, Aaron McLeod
  * http://www.melonjs.org
  *
  * Tile QT 0.7.x format
@@ -8,127 +8,6 @@
  *
  */
 (function (TMXConstants) {
-    /*
-     * Tileset Management
-     */
-
-    // bitmask constants to check for flipped & rotated tiles
-    var FlippedHorizontallyFlag    = 0x80000000;
-    var FlippedVerticallyFlag      = 0x40000000;
-    var FlippedAntiDiagonallyFlag  = 0x20000000;
-
-    /**
-     * a basic tile object
-     * @class
-     * @extends me.Rect
-     * @memberOf me
-     * @constructor
-     * @param {Number} x x index of the Tile in the map
-     * @param {Number} y y index of the Tile in the map
-     * @param {Number} w Tile width
-     * @param {Number} h Tile height
-     * @param {Number} tileId tileId
-     */
-    me.Tile = me.Rect.extend({
-        /** @ignore */
-        init : function (x, y, w, h, gid) {
-            /**
-             * tileset
-             * @public
-             * @type me.TMXTileset
-             * @name me.Tile#tileset
-             */
-            this.tileset = null;
-
-            /**
-             * the tile transformation matrix (if defined)
-             * @ignore
-             */
-            this.transform = null;
-            this._super(me.Rect, "init", [x * w, y * h, w, h]);
-
-            // Tile col / row pos
-            this.col = x;
-            this.row = y;
-
-            /**
-             * tileId
-             * @public
-             * @type int
-             * @name me.Tile#tileId
-             */
-            this.tileId = gid;
-            /**
-             * True if the tile is flipped horizontally<br>
-             * @public
-             * @type Boolean
-             * @name me.Tile#flipX
-             */
-            this.flippedX  = (this.tileId & FlippedHorizontallyFlag) !== 0;
-            /**
-             * True if the tile is flipped vertically<br>
-             * @public
-             * @type Boolean
-             * @name me.Tile#flippedY
-             */
-            this.flippedY  = (this.tileId & FlippedVerticallyFlag) !== 0;
-            /**
-             * True if the tile is flipped anti-diagonally<br>
-             * @public
-             * @type Boolean
-             * @name me.Tile#flippedAD
-             */
-            this.flippedAD = (this.tileId & FlippedAntiDiagonallyFlag) !== 0;
-
-            /**
-             * Global flag that indicates if the tile is flipped<br>
-             * @public
-             * @type Boolean
-             * @name me.Tile#flipped
-             */
-            this.flipped = this.flippedX || this.flippedY || this.flippedAD;
-            // create a transformation matrix if required
-            if (this.flipped === true) {
-                this.createTransform();
-            }
-
-            // clear out the flags and set the tileId
-            this.tileId &= ~(FlippedHorizontallyFlag | FlippedVerticallyFlag | FlippedAntiDiagonallyFlag);
-        },
-
-        /**
-         * create a transformation matrix for this tile
-         * @ignore
-         */
-        createTransform : function () {
-            if (this.transform === null) {
-                this.transform = new me.Matrix2d();
-            }
-            // reset the matrix (in case it was already defined)
-            this.transform.identity();
-            var a = this.transform.val;
-            if (this.flippedAD) {
-                // Use shearing to swap the X/Y axis
-                this.transform.set(
-                    0, 1, 0,
-                    1, 0, 0,
-                    0, 0, 1
-                );
-                this.transform.translate(0, this.height - this.width);
-            }
-            if (this.flippedX) {
-                this.transform.translate((this.flippedAD ? this.height : this.width), 0);
-                a[0] *= -1;
-                a[3] *= -1;
-
-            }
-            if (this.flippedY) {
-                this.transform.translate(0, (this.flippedAD ? this.width : this.height));
-                a[1] *= -1;
-                a[4] *= -1;
-            }
-        }
-    });
 
     /**
      * a TMX Tile Set Object
@@ -145,9 +24,6 @@
             // tile properties (collidable, etc..)
             this.TileProperties = [];
 
-            // a cache for offset value
-            this.tileXOffset = [];
-            this.tileYOffset = [];
             this.firstgid = this.lastgid = +tileset[TMXConstants.TMX_TAG_FIRSTGID];
             var src = tileset[TMXConstants.TMX_TAG_SOURCE];
             if (src && me.utils.getFileExtension(src).toLowerCase() === "tsx") {
@@ -258,24 +134,32 @@
             // extract base name
             imagesrc = me.utils.getBasename(imagesrc);
             this.image = imagesrc ? me.loader.getImage(imagesrc) : null;
-
+            
             if (!this.image) {
-                console.log("melonJS: '" + imagesrc + "' file for tileset '" + this.name + "' not found!");
+                throw new me.TMXTileset.Error("melonJS: '" + imagesrc + "' file for tileset '" + this.name + "' not found!");
             }
-            else {
-                // number of tiles per horizontal line
-                this.hTileCount = ~~((this.image.width - this.margin) / (this.tilewidth + this.spacing));
-                this.vTileCount = ~~((this.image.height - this.margin) / (this.tileheight + this.spacing));
-                // compute the last gid value in the tileset
-                this.lastgid = this.firstgid + (((this.hTileCount * this.vTileCount) - 1) || 0);
+            
+            // create a texture atlas for the given tileset
+            this.texture = me.video.renderer.cache.get(this.image, {
+                framewidth : this.tilewidth,
+                frameheight : this.tileheight,
+                margin : this.margin,
+                spacing : this.spacing
+            });
+            this.atlas = this.texture.getAtlas();
+            
+            // calculate the number of tiles per horizontal line
+            var hTileCount = ~~((this.image.width - this.margin) / (this.tilewidth + this.spacing));
+            var vTileCount = ~~((this.image.height - this.margin) / (this.tileheight + this.spacing));
+            // compute the last gid value in the tileset
+            this.lastgid = this.firstgid + (((hTileCount * vTileCount) - 1) || 0);
 
-                // check if transparency is defined for a specific color
-                var transparency = tileset[TMXConstants.TMX_TAG_TRANS] || tileset[TMXConstants.TMX_TAG_IMAGE][TMXConstants.TMX_TAG_TRANS];
-                // set Color Key for transparency if needed
-                if (typeof(transparency) !== "undefined") {
-                    // applyRGB Filter (return a context object)
-                    this.image = me.video.renderer.applyRGBFilter(this.image, "transparent", transparency.toUpperCase()).canvas;
-                }
+            // check if transparency is defined for a specific color
+            var transparency = tileset[TMXConstants.TMX_TAG_TRANS] || tileset[TMXConstants.TMX_TAG_IMAGE][TMXConstants.TMX_TAG_TRANS];
+            // set Color Key for transparency if needed
+            if (typeof(transparency) !== "undefined") {
+                // applyRGB Filter (return a context object)
+                this.image = me.video.renderer.applyRGBFilter(this.image, "transparent", transparency.toUpperCase()).canvas;
             }
         },
 
@@ -324,30 +208,6 @@
             return this.TileProperties[tileId];
         },
 
-        /**
-         * return the x offset of the specified tile in the tileset image
-         * @ignore
-         */
-        getTileOffsetX : function (tileId) {
-            var offset = this.tileXOffset[tileId];
-            if (typeof(offset) === "undefined") {
-                offset = this.tileXOffset[tileId] = this.margin + (this.spacing + this.tilewidth)  * (tileId % this.hTileCount);
-            }
-            return offset;
-        },
-
-        /**
-         * return the y offset of the specified tile in the tileset image
-         * @ignore
-         */
-        getTileOffsetY : function (tileId) {
-            var offset = this.tileYOffset[tileId];
-            if (typeof(offset) === "undefined") {
-                offset = this.tileYOffset[tileId] = this.margin + (this.spacing + this.tileheight)  * ~~(tileId / this.hTileCount);
-            }
-            return offset;
-        },
-
         // update tile animations
         update : function (dt) {
             var duration = 0,
@@ -389,11 +249,13 @@
                 // get the local tileset id
                 tileid -= this.firstgid;
             }
-
+            
+            var offset = this.atlas[tileid].offset;
+            
             // draw the tile
             renderer.drawImage(
                 this.image,
-                this.getTileOffsetX(tileid), this.getTileOffsetY(tileid),
+                offset.x, offset.y,
                 this.tilewidth, this.tileheight,
                 dx, dy,
                 this.tilewidth, this.tileheight
@@ -461,4 +323,20 @@
             }
         }
     });
+    
+    /**
+     * Base class for TMXTileset exception handling.
+     * @name Error
+     * @class
+     * @memberOf me.TMXTileset
+     * @constructor
+     * @param {String} msg Error message.
+     */
+    me.TMXTileset.Error = me.Error.extend({
+        init : function (msg) {
+            this._super(me.Error, "init", [ msg ]);
+            this.name = "me.TMXTileset.Error";
+        }
+    });
+    
 })(me.TMXConstants);

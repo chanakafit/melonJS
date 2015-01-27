@@ -154,45 +154,50 @@
          * @ignore
          */
         buildFromSpriteSheet : function (data) {
-            var atlas = []; // changing to {} breaks everything !
-            var image = data.region || data.image;
+            var atlas = {};
+            var image = data.image;
             var spacing = data.spacing || 0;
             var margin = data.margin || 0;
+            
+            var width = image.width;
+            var height = image.height;
 
-            // calculate the sprite count (line, col)
-            if ((image.width - margin) % (data.framewidth + spacing) !== 0 ||
-                (image.height - margin) % (data.frameheight + spacing) !== 0) {
-                throw new me.video.renderer.Texture.Error(
+            // calculate the sprite count (line, col)            
+            var spritecount = new me.Vector2d(
+                ~~((width - margin) / (data.framewidth + spacing)),
+                ~~((height - margin) / (data.frameheight + spacing))
+            );
+            
+            // verifying the texture size
+            if (((width - margin) % (data.framewidth + spacing) !== 0 ||
+                (height - margin) % (data.frameheight + spacing) !== 0)) {
+                // "truncate size"
+                width = margin + spritecount.x * (data.framewidth + spacing);
+                height = margin + spritecount.y * (data.frameheight + spacing);
+                // warning message
+                console.warn(
                     "Spritesheet Texture for image: " + image.src +
                     " is not divisible by " + (data.framewidth + spacing) +
-                    "x" + (data.frameheight + spacing)
+                    "x" + (data.frameheight + spacing) +
+                    ", truncating effective size to " + width + "x" + height
                 );
             }
-            var spritecount = new me.Vector2d(
-                ~~((image.width - margin) / (data.framewidth + spacing)),
-                ~~((image.height - margin) / (data.frameheight + spacing))
-            );
-            var offsetX = 0;
-            var offsetY = 0;
-            if (image.offset) {
-                offsetX = image.offset.x;
-                offsetY = image.offset.y;
-            }
+            
             // build the local atlas
             for (var frame = 0, count = spritecount.x * spritecount.y; frame < count ; frame++) {
-                atlas[frame] = {
+                atlas["" + frame] = {
                     name: "" + frame,
                     offset: new me.Vector2d(
-                        margin + (spacing + data.framewidth) * (frame % spritecount.x) + offsetX,
-                        margin + (spacing + data.frameheight) * ~~(frame / spritecount.x) + offsetY
+                        margin + (spacing + data.framewidth) * (frame % spritecount.x),
+                        margin + (spacing + data.frameheight) * ~~(frame / spritecount.x)
                     ),
                     width: data.framewidth,
                     height: data.frameheight,
                     angle: 0
                 };
             }
+            
             return atlas;
-
         },
 
         /**

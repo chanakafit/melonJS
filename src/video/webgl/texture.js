@@ -18,9 +18,26 @@
         build : function (data) {
             var w = data.meta.size.w;
             var h = data.meta.size.h;
-
             var atlas = this._super(me.CanvasRenderer.prototype.Texture, "build", [ data ]);
 
+            return this._addStMap(atlas, w, h);
+        },
+
+        /**
+         * @ignore
+         */
+        buildFromSpriteSheet : function (data) {
+            var w = data.image.width;
+            var h = data.image.height;
+            var atlas = this._super(me.CanvasRenderer.prototype.Texture, "buildFromSpriteSheet", [ data ]);
+
+            return this._addStMap(atlas, w, h);
+        },
+
+        /**
+         * @ignore
+         */
+        _addStMap : function (atlas, w, h) {
             Object.keys(atlas).forEach(function (frame) {
                 // Source coordinates
                 var s = atlas[frame].offset;
@@ -40,7 +57,6 @@
                 var key = s.x + "," + s.y + "," + w + "," + h;
                 atlas[key] = atlas[frame];
             });
-
             return atlas;
         },
 

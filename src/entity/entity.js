@@ -93,7 +93,7 @@
              * @memberOf me.Entity
              */
             this.type = settings.type;
-            
+
             /**
              * object unique ID (as defined in Tiled)
              * @public
@@ -249,6 +249,7 @@
             if (this.renderable) {
                 return this.renderable.update(dt);
             }
+            this._super(me.Renderable, "update", [dt]);
             return false;
         },
 

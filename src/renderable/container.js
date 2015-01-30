@@ -136,8 +136,8 @@
             }
 
             child.ancestor = this;
-            if (child.updateAbsoluteBounds) {
-                child.updateAbsoluteBounds();
+            if (child.getAbsoluteBounds) {
+                child.getAbsoluteBounds();
             }
             this.children.push(child);
             if (this.autoSort === true) {
@@ -596,8 +596,6 @@
             var isPaused = me.state.isPaused();
             var viewport = me.game.viewport;
 
-            this._super(me.Renderable, "update", [dt]);
-
             for (var i = this.children.length, obj; i--, (obj = this.children[i]);) {
                 if (isPaused && (!obj.updateWhenPaused)) {
                     // skip this object
@@ -615,6 +613,8 @@
                     // update our object
                     isDirty = ((obj.inViewport || obj.alwaysUpdate) && obj.update(dt)) || isDirty;
 
+                    obj.getAbsoluteBounds();
+
                     if (globalFloatingCounter > 0) {
                         globalFloatingCounter--;
                     }
@@ -622,8 +622,11 @@
                 else {
                     // just directly call update() for non renderable object
                     isDirty = obj.update(dt) || isDirty;
+                    obj.getAbsoluteBounds();
                 }
             }
+
+            this.getAbsoluteBounds();
             return isDirty;
         },
 
